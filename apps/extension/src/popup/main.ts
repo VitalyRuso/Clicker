@@ -1,24 +1,18 @@
 import "./styles.css";
-import { planLocalClick } from "../shared/planner";
-import type { PageElementSnapshot, PageScanResult, PlannedAction, RuntimeResponse } from "../shared/types";
+import {
+  createLocalAgentPlan,
+  type BrowserTool,
+  type LocalAgentCandidate
+} from "../shared/localAgent";
+import type {
+  PageElementSnapshot,
+  PageScanResult,
+  PlannedAction,
+  RuntimeResponse
+} from "../shared/types";
 
 type StatusMode = "normal" | "error" | "success";
-type AssistantActionKind = "click" | "open_url" | "ask_clarification";
 type AssistantTheme = "professional" | "jarvis" | "soft";
-
-type AssistantCandidate = {
-  id: string;
-  kind: AssistantActionKind;
-  title: string;
-  subtitle: string;
-  confidence: number;
-  reason: string;
-  risk: "low" | "medium" | "blocked";
-  source: "local" | "navigation" | "manual";
-  elementId?: string;
-  url?: string;
-  matchedText?: string;
-};
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
@@ -56,9 +50,9 @@ if (!app) {
 }
 
 let lastScan: PageScanResult | null = null;
-let selectedCandidate: AssistantCandidate | null = null;
-let candidates: AssistantCandidate[] = [];
-let activeTheme: AssistantTheme = "jarvis";
+let selectedCandidate: LocalAgentCandidate | null = null;
+let candidates: LocalAgentCandidate[] = [];
+let activeTheme: AssistantTheme = "soft";
 let recognition: SpeechRecognitionLike | null = null;
 let isListening = false;
 
@@ -66,9 +60,9 @@ app.innerHTML = `
   <main class="apShell" data-theme="${activeTheme}">
     <header class="apHero">
       <div>
-        <p class="apEyebrow">Voice Browser Assistant</p>
+        <p class="apEyebrow">Local Browser Agent</p>
         <h1>ActionPilot</h1>
-        <p class="apSubTitle">Tell the browser what you want. Choose the right action. Confirm. Done.</p>
+        <p class="apSubTitle">Works locally. No server needed. Chat or speak, then confirm the action.</p>
       </div>
       <div class="apOrb" aria-hidden="true">
         <span></span>
@@ -79,7 +73,7 @@ app.innerHTML = `
       <div class="apQuestionRow">
         <div>
           <p class="apTinyLabel">Command</p>
-          <h2>What do you want me to do?</h2>
+          <h2>What should I do?</h2>
         </div>
         <button id="newChatButton" class="apIconButton" type="button">New chat</button>
       </div>
@@ -87,19 +81,19 @@ app.innerHTML = `
       <textarea
         id="instruction"
         class="apCommandInput"
-        rows="3"
-        placeholder="Try: Open YouTube / Click the search button / Scroll down"
+        rows="2"
+        placeholder="Try: Open YouTube / Search Google taxi Madrid / Click search / Scroll down"
       ></textarea>
 
       <div class="apQuickRow">
         <button class="apChip" data-example="Open YouTube">Open YouTube</button>
-        <button class="apChip" data-example="Click the search button">Click search</button>
-        <button class="apChip" data-example="Click login">Click login</button>
+        <button class="apChip" data-example="Search Google taxi Madrid">Search Google</button>
+        <button class="apChip" data-example="Scroll down">Scroll down</button>
       </div>
 
       <div class="apActionRow">
         <button id="voiceButton" class="apVoiceButton" type="button">🎙 Speak</button>
-        <button id="analyzeButton" class="apPrimaryButton" type="button">Analyze page</button>
+        <button id="analyzeButton" class="apPrimaryButton" type="button">Run local agent</button>
       </div>
     </section>
 
@@ -114,7 +108,7 @@ app.innerHTML = `
     <section class="apCard" id="resultsSection" hidden>
       <div class="apSectionHeader">
         <div>
-          <p class="apTinyLabel">Assistant result</p>
+          <p class="apTinyLabel">Local agent result</p>
           <h2 id="resultTitle">I found possible actions</h2>
         </div>
         <span id="candidateCount" class="apCountBadge">0</span>
@@ -123,7 +117,7 @@ app.innerHTML = `
       <div id="candidateCarousel" class="apCarousel"></div>
 
       <div class="apCarouselHint">
-        Choose a card, or later say: “first”, “second”, “confirm”, “cancel”.
+        Choose a card, say “first / second / confirm”, or ask again.
       </div>
     </section>
 
@@ -140,7 +134,7 @@ app.innerHTML = `
 
       <div class="apActionRow">
         <button id="askAgainButton" class="apSecondaryButton" type="button">Ask again</button>
-        <button id="executeButton" class="apExecuteButton" type="button">Execute confirmed action</button>
+        <button id="executeButton" class="apExecuteButton" type="button">Execute</button>
       </div>
     </section>
 
@@ -152,12 +146,12 @@ app.innerHTML = `
           <strong id="elementsCount">0</strong>
         </div>
         <div>
-          <p class="apTinyLabel">Planner</p>
-          <strong>Local adapter</strong>
+          <p class="apTinyLabel">Brain</p>
+          <strong>Local agent</strong>
         </div>
         <div>
-          <p class="apTinyLabel">Agent ready</p>
-          <strong>Contract prepared</strong>
+          <p class="apTinyLabel">Server</p>
+          <strong>Not required</strong>
         </div>
       </div>
       <div id="elementsList" class="apElementsList">No scan yet.</div>
@@ -205,207 +199,32 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
-function normalize(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/www\.\S+/g, " ")
-    .replace(/[^a-z0-9а-яёáéíóúüñ\s.-]/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function meaningfulTokens(input: string): string[] {
-  const stopWords = new Set([
-    "click",
-    "press",
-    "tap",
-    "button",
-    "link",
-    "the",
-    "a",
-    "an",
-    "on",
-    "to",
-    "please",
-    "open",
-    "go",
-    "find",
-    "select",
-    "input",
-    "field",
-    "me",
-    "for"
-  ]);
-
-  return normalize(input)
-    .split(" ")
-    .filter((token) => token.length > 1 && !stopWords.has(token));
-}
-
-function elementLabel(element: PageElementSnapshot): string {
-  return [element.text, element.ariaLabel, element.placeholder, element.title].filter(Boolean).join(" | ") || `<${element.tagName}>`;
-}
-
-function elementMeta(element: PageElementSnapshot): string {
-  const parts = [
-    element.tagName,
-    element.role ? `role=${element.role}` : "",
-    element.inputType ? `type=${element.inputType}` : "",
-    `${Math.round(element.rect.width)}x${Math.round(element.rect.height)}`
-  ];
-
-  return parts.filter(Boolean).join(" · ");
-}
-
-function elementSearchText(element: PageElementSnapshot): string {
-  return normalize(
-    [
-      element.text,
-      element.ariaLabel,
-      element.placeholder,
-      element.title,
-      element.role,
-      element.tagName,
-      element.inputType
-    ].join(" ")
-  );
-}
-
-function scoreCandidate(instruction: string, element: PageElementSnapshot): number {
-  const normalizedInstruction = normalize(instruction);
-  const tokens = meaningfulTokens(instruction);
-  const haystack = elementSearchText(element);
-
-  if (!element.visible || !element.clickable || haystack.length === 0) {
-    return 0;
-  }
-
-  let score = 0;
-
-  if (normalizedInstruction && haystack.includes(normalizedInstruction)) {
-    score += 45;
-  }
-
-  for (const token of tokens) {
-    if (haystack.includes(token)) {
-      score += 20;
-    }
-  }
-
-  if (element.tagName === "button") score += 10;
-  if (element.role === "button") score += 8;
-  if (element.tagName === "input") score += 8;
-  if (element.tagName === "a") score += 5;
-  if (element.rect.width > 0 && element.rect.height > 0) score += 4;
-
-  return Math.min(score, 100);
-}
-
-function getNavigationCandidate(instruction: string): AssistantCandidate | null {
-  const value = instruction.trim();
-  const normalized = normalize(value);
-
-  const directUrlMatch = value.match(/https?:\/\/[^\s]+/i);
-  if (directUrlMatch) {
-    return {
-      id: crypto.randomUUID(),
-      kind: "open_url",
-      title: "Open website",
-      subtitle: directUrlMatch[0],
-      confidence: 96,
-      reason: "The command contains a direct URL.",
-      risk: "low",
-      source: "navigation",
-      url: directUrlMatch[0]
-    };
-  }
-
-  const domainMatch = value.match(/\b([a-z0-9-]+\.[a-z]{2,})(\/[^\s]*)?\b/i);
-  if (domainMatch) {
-    return {
-      id: crypto.randomUUID(),
-      kind: "open_url",
-      title: `Open ${domainMatch[1]}`,
-      subtitle: `https://${domainMatch[0]}`,
-      confidence: 90,
-      reason: "The command contains a website domain.",
-      risk: "low",
-      source: "navigation",
-      url: `https://${domainMatch[0]}`
-    };
-  }
-
-  const knownSites: Array<{ keys: string[]; title: string; url: string }> = [
-    { keys: ["youtube", "yt"], title: "Open YouTube", url: "https://www.youtube.com" },
-    { keys: ["google"], title: "Open Google", url: "https://www.google.com" },
-    { keys: ["gmail"], title: "Open Gmail", url: "https://mail.google.com" },
-    { keys: ["rae", "dle"], title: "Open RAE dictionary", url: "https://dle.rae.es" },
-    { keys: ["github"], title: "Open GitHub", url: "https://github.com" },
-    { keys: ["chatgpt", "openai"], title: "Open ChatGPT", url: "https://chatgpt.com" }
-  ];
-
-  const site = knownSites.find((item) => item.keys.some((key) => normalized.includes(key)));
-
-  if (!site) {
-    return null;
-  }
-
-  if (!normalized.includes("open") && !normalized.includes("go") && !normalized.includes("открой")) {
-    return null;
-  }
-
-  return {
-    id: crypto.randomUUID(),
-    kind: "open_url",
-    title: site.title,
-    subtitle: site.url,
-    confidence: 92,
-    reason: "The command looks like a website navigation request.",
-    risk: "low",
-    source: "navigation",
-    url: site.url
+function toolIcon(tool: BrowserTool): string {
+  const icons: Record<BrowserTool, string> = {
+    open_url: "🌐",
+    search_web: "🔎",
+    click_element: "👆",
+    scroll_page: "↕️",
+    go_back: "↩️",
+    go_forward: "↪️",
+    ask_clarification: "❔"
   };
+
+  return icons[tool];
 }
 
-function makeClickCandidates(instruction: string, elements: PageElementSnapshot[], limit = 4): AssistantCandidate[] {
-  const ranked = elements
-    .map((element) => ({
-      element,
-      score: scoreCandidate(instruction, element)
-    }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
-
-  return ranked.map(({ element, score }, index) => ({
-    id: crypto.randomUUID(),
-    kind: "click",
-    title: elementLabel(element),
-    subtitle: elementMeta(element),
-    confidence: index === 0 ? Math.max(score, 60) : score,
-    reason:
-      index === 0
-        ? "Best visible match found on the active page."
-        : "Possible visible match found on the active page.",
-    risk: score >= 45 ? "low" : "medium",
-    source: "local",
-    elementId: element.elementId,
-    matchedText: elementLabel(element)
-  }));
-}
-
-function makeClarificationCandidate(): AssistantCandidate {
-  return {
-    id: crypto.randomUUID(),
-    kind: "ask_clarification",
-    title: "Ask a clearer question",
-    subtitle: "The assistant needs a more specific command.",
-    confidence: 50,
-    reason: "The current command is too broad or no strong visible target was found.",
-    risk: "low",
-    source: "local"
+function toolLabel(tool: BrowserTool): string {
+  const labels: Record<BrowserTool, string> = {
+    open_url: "open",
+    search_web: "search",
+    click_element: "click",
+    scroll_page: "scroll",
+    go_back: "back",
+    go_forward: "forward",
+    ask_clarification: "clarify"
   };
+
+  return labels[tool];
 }
 
 function renderPage(scan: PageScanResult | null) {
@@ -433,38 +252,52 @@ function renderDeveloperElements(elements: PageElementSnapshot[]) {
     .map(
       (element) => `
         <article>
-          <strong>${escapeHtml(elementLabel(element))}</strong>
-          <span>${escapeHtml(elementMeta(element))}</span>
+          <strong>${escapeHtml(
+            [element.text, element.ariaLabel, element.placeholder, element.title]
+              .filter(Boolean)
+              .join(" | ") || `<${element.tagName}>`
+          )}</strong>
+          <span>${escapeHtml(
+            [
+              element.tagName,
+              element.role ? `role=${element.role}` : "",
+              element.inputType ? `type=${element.inputType}` : "",
+              `${Math.round(element.rect.width)}x${Math.round(element.rect.height)}`
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          )}</span>
         </article>
       `
     )
     .join("");
 }
 
-function renderCandidates(nextCandidates: AssistantCandidate[]) {
-  candidates = nextCandidates;
+function renderCandidates(nextCandidates: LocalAgentCandidate[]) {
+  candidates = nextCandidates.slice(0, 4);
   candidateCount.textContent = String(candidates.length);
   resultsSection.hidden = candidates.length === 0;
   resultTitle.textContent =
-    candidates.length > 0 ? `I found ${candidates.length} possible action${candidates.length === 1 ? "" : "s"}` : "No action found";
+    candidates.length > 0
+      ? `I found ${candidates.length} possible action${candidates.length === 1 ? "" : "s"}`
+      : "No action found";
 
   candidateCarousel.innerHTML = candidates
     .map((candidate, index) => {
       const isSelected = selectedCandidate?.id === candidate.id;
       const badge = index === 0 ? "Recommended" : candidate.confidence >= 70 ? "Good match" : "Possible";
-      const icon = candidate.kind === "open_url" ? "🌐" : candidate.kind === "click" ? "👆" : "❔";
 
       return `
         <article class="apCandidateCard ${isSelected ? "isSelected" : ""}" data-candidate-id="${escapeHtml(candidate.id)}">
           <div class="apCandidateTop">
-            <span class="apCandidateIcon">${icon}</span>
+            <span class="apCandidateIcon">${toolIcon(candidate.tool)}</span>
             <span class="apCandidateBadge">${badge}</span>
           </div>
           <h3>${escapeHtml(candidate.title)}</h3>
           <p>${escapeHtml(candidate.subtitle)}</p>
           <div class="apConfidence">
             <div class="apConfidenceTop">
-              <span>${candidate.kind}</span>
+              <span>${toolLabel(candidate.tool)}</span>
               <strong>${candidate.confidence}%</strong>
             </div>
             <div class="apConfidenceBar">
@@ -481,7 +314,7 @@ function renderCandidates(nextCandidates: AssistantCandidate[]) {
     .join("");
 }
 
-function renderSelected(candidate: AssistantCandidate | null) {
+function renderSelected(candidate: LocalAgentCandidate | null) {
   selectedCandidate = candidate;
   selectedSection.hidden = !candidate;
 
@@ -496,13 +329,13 @@ function renderSelected(candidate: AssistantCandidate | null) {
   selectedTitle.textContent = candidate.title;
   selectedReason.textContent = candidate.reason;
   selectedConfidence.textContent = `${candidate.confidence}%`;
-  executeButton.disabled = candidate.risk === "blocked" || candidate.kind === "ask_clarification";
+  executeButton.disabled = candidate.risk === "blocked" || candidate.tool === "ask_clarification";
   renderCandidates(candidates);
 }
 
-function makePlannedAction(candidate: AssistantCandidate): PlannedAction {
+function makePlannedClick(candidate: LocalAgentCandidate): PlannedAction {
   if (!candidate.elementId) {
-    throw new Error("This candidate does not have a target element.");
+    throw new Error("This action does not have a target element.");
   }
 
   return {
@@ -531,65 +364,81 @@ async function scanActivePage(): Promise<PageScanResult> {
   return response.payload;
 }
 
-async function openUrlInActiveTab(url: string) {
+async function getActiveTabId(): Promise<number> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab?.id) {
     throw new Error("No active tab found.");
   }
 
-  await chrome.tabs.update(tab.id, { url });
+  return tab.id;
+}
+
+async function openUrlInActiveTab(url: string) {
+  const tabId = await getActiveTabId();
+  await chrome.tabs.update(tabId, { url });
+}
+
+async function scrollActivePage(direction: "up" | "down") {
+  const tabId = await getActiveTabId();
+
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [direction],
+    func: (scrollDirection: "up" | "down") => {
+      window.scrollBy({
+        top: scrollDirection === "down" ? Math.round(window.innerHeight * 0.75) : -Math.round(window.innerHeight * 0.75),
+        behavior: "smooth"
+      });
+    }
+  });
+}
+
+async function goBack() {
+  const tabId = await getActiveTabId();
+  await chrome.tabs.goBack(tabId);
+}
+
+async function goForward() {
+  const tabId = await getActiveTabId();
+  await chrome.tabs.goForward(tabId);
 }
 
 async function analyzeCommand() {
-  const instruction = instructionInput.value.trim();
+  const message = instructionInput.value.trim();
 
-  if (!instruction) {
+  if (!message) {
     setStatus("Write or say a command first.", "error");
     return;
   }
 
-  selectedCandidate = null;
   renderSelected(null);
-  setStatus("Analyzing your command...", "normal");
-
-  const navigationCandidate = getNavigationCandidate(instruction);
-
-  if (navigationCandidate) {
-    lastScan = null;
-    renderPage(null);
-    renderDeveloperElements([]);
-    renderCandidates([navigationCandidate]);
-    renderSelected(navigationCandidate);
-    setStatus("I found a navigation action. Review it before executing.", "success");
-    return;
-  }
+  setStatus("Local agent is thinking...", "normal");
 
   try {
-    setStatus("Scanning the active page...", "normal");
+    let plan = createLocalAgentPlan({
+      message,
+      scan: lastScan
+    });
 
-    const scan = await scanActivePage();
-    lastScan = scan;
-    renderPage(scan);
-    renderDeveloperElements(scan.elements);
+    if (plan.needsScan) {
+      setStatus("Analyzing the active page locally...", "normal");
+      lastScan = await scanActivePage();
+      renderPage(lastScan);
+      renderDeveloperElements(lastScan.elements);
 
-    const plannerSafetyCheck = planLocalClick(instruction, scan.elements);
-
-    if (!plannerSafetyCheck.ok && plannerSafetyCheck.blocked) {
-      renderCandidates([]);
-      setStatus(plannerSafetyCheck.reason, "error");
-      return;
+      plan = createLocalAgentPlan({
+        message,
+        scan: lastScan
+      });
     }
 
-    const clickCandidates = makeClickCandidates(instruction, scan.elements, 4);
-    const finalCandidates = clickCandidates.length > 0 ? clickCandidates : [makeClarificationCandidate()];
-
-    renderCandidates(finalCandidates);
-    renderSelected(finalCandidates[0] ?? null);
-    setStatus("Choose the best card, then execute only if it is correct.", "success");
+    renderCandidates(plan.candidates);
+    renderSelected(plan.candidates.find((candidate) => candidate.id === plan.recommendedCandidateId) ?? plan.candidates[0] ?? null);
+    setStatus(plan.message, "success");
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown analyze error.";
-    setStatus(message, "error");
+    const errorMessage = error instanceof Error ? error.message : "Unknown local agent error.";
+    setStatus(errorMessage, "error");
   }
 }
 
@@ -599,8 +448,8 @@ async function executeSelectedAction() {
     return;
   }
 
-  if (selectedCandidate.kind === "ask_clarification") {
-    setStatus("Ask a clearer command in the input field.", "normal");
+  if (selectedCandidate.tool === "ask_clarification") {
+    setStatus("Ask again with more detail.", "normal");
     instructionInput.focus();
     return;
   }
@@ -608,32 +457,104 @@ async function executeSelectedAction() {
   setStatus("Executing confirmed action...", "normal");
 
   try {
-    if (selectedCandidate.kind === "open_url") {
+    if (selectedCandidate.tool === "open_url" || selectedCandidate.tool === "search_web") {
       if (!selectedCandidate.url) {
         throw new Error("No URL found for this action.");
       }
 
       await openUrlInActiveTab(selectedCandidate.url);
-      setStatus("Website opened.", "success");
+      setStatus("Done. Website opened.", "success");
       return;
     }
 
-    const plan = makePlannedAction(selectedCandidate);
-
-    const response = await sendMessage({
-      type: "EXECUTE_ACTION",
-      payload: { action: plan }
-    });
-
-    if (!response.ok || response.type !== "EXECUTE_ACTION_RESULT") {
-      throw new Error(response.ok ? "Unexpected execution response." : response.error);
+    if (selectedCandidate.tool === "scroll_page") {
+      await scrollActivePage(selectedCandidate.scrollDirection ?? "down");
+      setStatus("Done. Page scrolled.", "success");
+      return;
     }
 
-    setStatus(response.payload.message, response.payload.ok ? "success" : "error");
+    if (selectedCandidate.tool === "go_back") {
+      await goBack();
+      setStatus("Done. Went back.", "success");
+      return;
+    }
+
+    if (selectedCandidate.tool === "go_forward") {
+      await goForward();
+      setStatus("Done. Went forward.", "success");
+      return;
+    }
+
+    if (selectedCandidate.tool === "click_element") {
+      const plan = makePlannedClick(selectedCandidate);
+
+      const response = await sendMessage({
+        type: "EXECUTE_ACTION",
+        payload: { action: plan }
+      });
+
+      if (!response.ok || response.type !== "EXECUTE_ACTION_RESULT") {
+        throw new Error(response.ok ? "Unexpected execution response." : response.error);
+      }
+
+      setStatus(response.payload.message, response.payload.ok ? "success" : "error");
+      return;
+    }
+
+    setStatus("This tool is not executable yet.", "error");
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown execution error.";
-    setStatus(message, "error");
+    const errorMessage = error instanceof Error ? error.message : "Unknown execution error.";
+    setStatus(errorMessage, "error");
   }
+}
+
+function selectCandidateByIndex(index: number) {
+  const candidate = candidates[index];
+
+  if (!candidate) {
+    setStatus("That option is not available.", "error");
+    return;
+  }
+
+  renderSelected(candidate);
+  setStatus(`Selected: ${candidate.title}`, "success");
+}
+
+function handleVoiceShortcut(transcript: string): boolean {
+  const text = transcript.toLowerCase().trim();
+
+  if (["first", "first one", "one", "первый", "первая"].includes(text)) {
+    selectCandidateByIndex(0);
+    return true;
+  }
+
+  if (["second", "second one", "two", "второй", "вторая"].includes(text)) {
+    selectCandidateByIndex(1);
+    return true;
+  }
+
+  if (["third", "third one", "three", "третий", "третья"].includes(text)) {
+    selectCandidateByIndex(2);
+    return true;
+  }
+
+  if (["fourth", "fourth one", "four", "четвертый", "четвёртый", "четвертая", "четвёртая"].includes(text)) {
+    selectCandidateByIndex(3);
+    return true;
+  }
+
+  if (["confirm", "execute", "yes", "да", "подтверждаю", "выполни"].includes(text)) {
+    void executeSelectedAction();
+    return true;
+  }
+
+  if (["cancel", "stop", "no", "нет", "отмена"].includes(text)) {
+    renderSelected(null);
+    setStatus("Cancelled.", "normal");
+    return true;
+  }
+
+  return false;
 }
 
 function startVoiceInput() {
@@ -662,6 +583,10 @@ function startVoiceInput() {
 
     if (!transcript) {
       setStatus("I did not hear a command. Try again.", "error");
+      return;
+    }
+
+    if (handleVoiceShortcut(transcript)) {
       return;
     }
 
@@ -712,7 +637,7 @@ voiceButton.addEventListener("click", () => {
 
 askAgainButton.addEventListener("click", () => {
   instructionInput.focus();
-  setStatus("Refine your command and analyze again.", "normal");
+  setStatus("Refine your command and run the local agent again.", "normal");
 });
 
 newChatButton.addEventListener("click", () => {
