@@ -191,3 +191,89 @@ button.dangerSafe {
   background: #f8faff;
   padding: 10px;
 }
+
+.helpText {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 8px 0 0;
+}
+
+.pageBox {
+  display: grid;
+  gap: 4px;
+  word-break: break-word;
+}
+
+.pageBox strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.pageBox span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pageBox.empty {
+  color: #667085;
+  font-size: 13px;
+}
+
+.smallBadge,
+.scoreBadge {
+  border-radius: 999px;
+  background: #edf2ff;
+  color: #3155a6;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 7px;
+}
+
+.listSummary {
+  color: #667085;
+  font-size: 12px;
+  margin: 0 0 4px;
+}
+
+.selectableItem {
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.selectableItem:hover {
+  border-color: #a9bbf3;
+  background: #f8faff;
+  transform: translateY(-1px);
+}
+
+.candidateItem {
+  border-color: #d7e2ff;
+}
+
+.candidateHeader {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.warningBox {
+  border: 1px solid #fedf89;
+  border-radius: 10px;
+  background: #fffaeb;
+  color: #b54708;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 8px;
+  padding: 8px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
