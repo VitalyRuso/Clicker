@@ -14,6 +14,13 @@ import type {
 type StatusMode = "normal" | "error" | "success";
 type AssistantTheme = "professional" | "jarvis" | "soft";
 
+type ChatMessage = {
+  id: string;
+  role: "assistant" | "user";
+  text: string;
+  candidates?: LocalAgentCandidate[];
+};
+
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 type SpeechRecognitionLike = {
@@ -51,98 +58,49 @@ if (!app) {
 
 let lastScan: PageScanResult | null = null;
 let selectedCandidate: LocalAgentCandidate | null = null;
-let candidates: LocalAgentCandidate[] = [];
+let latestCandidates: LocalAgentCandidate[] = [];
+let messages: ChatMessage[] = [];
 let activeTheme: AssistantTheme = "soft";
 let recognition: SpeechRecognitionLike | null = null;
 let isListening = false;
 
+const autoRunTools = new Set<BrowserTool>([
+  "open_url",
+  "search_web",
+  "scroll_page",
+  "go_back",
+  "go_forward"
+]);
+
 app.innerHTML = `
-  <main class="apShell" data-theme="${activeTheme}">
-    <header class="apHero">
-      <div>
-        <p class="apEyebrow">Local Browser Agent</p>
-        <h1>ActionPilot</h1>
-        <p class="apSubTitle">Works locally. No server needed. Chat or speak, then confirm the action.</p>
+  <main class="apChatShell" data-theme="${activeTheme}">
+    <header class="apChatHeader">
+      <div class="apBrandBlock">
+        <span class="apMiniOrb"></span>
+        <div>
+          <p class="apEyebrow">Local Browser Agent</p>
+          <h1>ActionPilot</h1>
+        </div>
       </div>
-      <div class="apOrb" aria-hidden="true">
-        <span></span>
-      </div>
+      <button id="newChatButton" class="apHeaderButton" type="button">New chat</button>
     </header>
 
-    <section class="apCard apCommandCard">
-      <div class="apQuestionRow">
-        <div>
-          <p class="apTinyLabel">Command</p>
-          <h2>What should I do?</h2>
-        </div>
-        <button id="newChatButton" class="apIconButton" type="button">New chat</button>
-      </div>
+    <section id="chatThread" class="apChatThread"></section>
 
-      <textarea
-        id="instruction"
-        class="apCommandInput"
-        rows="2"
-        placeholder="Try: Open YouTube / Search Google taxi Madrid / Click search / Scroll down"
-      ></textarea>
-
-      <div class="apQuickRow">
-        <button class="apChip" data-example="Open YouTube">Open YouTube</button>
-        <button class="apChip" data-example="Search Google taxi Madrid">Search Google</button>
-        <button class="apChip" data-example="Scroll down">Scroll down</button>
+    <section id="selectedDock" class="apSelectedDock" hidden>
+      <div>
+        <p class="apTinyLabel">Selected action</p>
+        <strong id="selectedTitle">Nothing selected</strong>
+        <span id="selectedReason"></span>
       </div>
-
-      <div class="apActionRow">
-        <button id="voiceButton" class="apVoiceButton" type="button">🎙 Speak</button>
-        <button id="analyzeButton" class="apPrimaryButton" type="button">Run local agent</button>
-      </div>
+      <button id="executeButton" class="apExecuteMiniButton" type="button">Execute</button>
     </section>
 
-    <section class="apCard apStatusCard">
-      <div class="apStatusTop">
-        <span class="apPulseDot"></span>
-        <p id="status">Ready. Write or say a command.</p>
-      </div>
-      <div id="pageBox" class="apPageBox">No page analyzed yet.</div>
-    </section>
-
-    <section class="apCard" id="resultsSection" hidden>
-      <div class="apSectionHeader">
-        <div>
-          <p class="apTinyLabel">Local agent result</p>
-          <h2 id="resultTitle">I found possible actions</h2>
-        </div>
-        <span id="candidateCount" class="apCountBadge">0</span>
-      </div>
-
-      <div id="candidateCarousel" class="apCarousel"></div>
-
-      <div class="apCarouselHint">
-        Choose a card, say “first / second / confirm”, or ask again.
-      </div>
-    </section>
-
-    <section class="apCard" id="selectedSection" hidden>
-      <div class="apSectionHeader">
-        <div>
-          <p class="apTinyLabel">Selected action</p>
-          <h2 id="selectedTitle">Nothing selected</h2>
-        </div>
-        <span id="selectedConfidence" class="apCountBadge">0%</span>
-      </div>
-
-      <p id="selectedReason" class="apSelectedReason"></p>
-
-      <div class="apActionRow">
-        <button id="askAgainButton" class="apSecondaryButton" type="button">Ask again</button>
-        <button id="executeButton" class="apExecuteButton" type="button">Execute</button>
-      </div>
-    </section>
-
-    <details class="apCard apAdvanced">
+    <details class="apDevDrawer">
       <summary>Developer details</summary>
-      <div class="apAdvancedGrid">
+      <div class="apDevGrid">
         <div>
-          <p class="apTinyLabel">Detected elements</p>
+          <p class="apTinyLabel">Detected</p>
           <strong id="elementsCount">0</strong>
         </div>
         <div>
@@ -151,13 +109,26 @@ app.innerHTML = `
         </div>
         <div>
           <p class="apTinyLabel">Server</p>
-          <strong>Not required</strong>
+          <strong>None</strong>
         </div>
       </div>
+      <div id="pageBox" class="apPageBox">No page analyzed yet.</div>
       <div id="elementsList" class="apElementsList">No scan yet.</div>
     </details>
 
-    <section class="apThemeDock">
+    <footer class="apComposer">
+      <textarea
+        id="instruction"
+        rows="1"
+        placeholder="Ask ActionPilot..."
+      ></textarea>
+      <div class="apComposerActions">
+        <button id="voiceButton" type="button">🎙</button>
+        <button id="sendButton" type="button">Send</button>
+      </div>
+    </footer>
+
+    <section class="apThemeDock apChatThemeDock">
       <button class="apThemeButton" data-theme="professional">Professional</button>
       <button class="apThemeButton" data-theme="jarvis">Jarvis</button>
       <button class="apThemeButton" data-theme="soft">Soft</button>
@@ -165,30 +136,19 @@ app.innerHTML = `
   </main>
 `;
 
-const shell = document.querySelector<HTMLElement>(".apShell")!;
+const shell = document.querySelector<HTMLElement>(".apChatShell")!;
+const chatThread = document.querySelector<HTMLDivElement>("#chatThread")!;
 const instructionInput = document.querySelector<HTMLTextAreaElement>("#instruction")!;
-const analyzeButton = document.querySelector<HTMLButtonElement>("#analyzeButton")!;
+const sendButton = document.querySelector<HTMLButtonElement>("#sendButton")!;
 const voiceButton = document.querySelector<HTMLButtonElement>("#voiceButton")!;
-const executeButton = document.querySelector<HTMLButtonElement>("#executeButton")!;
-const askAgainButton = document.querySelector<HTMLButtonElement>("#askAgainButton")!;
 const newChatButton = document.querySelector<HTMLButtonElement>("#newChatButton")!;
-const statusElement = document.querySelector<HTMLParagraphElement>("#status")!;
+const selectedDock = document.querySelector<HTMLElement>("#selectedDock")!;
+const selectedTitle = document.querySelector<HTMLElement>("#selectedTitle")!;
+const selectedReason = document.querySelector<HTMLElement>("#selectedReason")!;
+const executeButton = document.querySelector<HTMLButtonElement>("#executeButton")!;
 const pageBox = document.querySelector<HTMLDivElement>("#pageBox")!;
-const resultsSection = document.querySelector<HTMLElement>("#resultsSection")!;
-const selectedSection = document.querySelector<HTMLElement>("#selectedSection")!;
-const candidateCarousel = document.querySelector<HTMLDivElement>("#candidateCarousel")!;
-const candidateCount = document.querySelector<HTMLSpanElement>("#candidateCount")!;
-const resultTitle = document.querySelector<HTMLHeadingElement>("#resultTitle")!;
-const selectedTitle = document.querySelector<HTMLHeadingElement>("#selectedTitle")!;
-const selectedConfidence = document.querySelector<HTMLSpanElement>("#selectedConfidence")!;
-const selectedReason = document.querySelector<HTMLParagraphElement>("#selectedReason")!;
 const elementsCount = document.querySelector<HTMLElement>("#elementsCount")!;
 const elementsList = document.querySelector<HTMLDivElement>("#elementsList")!;
-
-function setStatus(message: string, mode: StatusMode = "normal") {
-  statusElement.textContent = message;
-  statusElement.dataset.mode = mode;
-}
 
 function escapeHtml(value: string): string {
   return value
@@ -225,6 +185,102 @@ function toolLabel(tool: BrowserTool): string {
   };
 
   return labels[tool];
+}
+
+function addMessage(message: Omit<ChatMessage, "id">) {
+  messages.push({
+    id: crypto.randomUUID(),
+    ...message
+  });
+
+  renderMessages();
+}
+
+function updateLastAssistantMessage(text: string, candidates?: LocalAgentCandidate[]) {
+  const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+
+  if (!lastAssistant) {
+    addMessage({ role: "assistant", text, candidates });
+    return;
+  }
+
+  lastAssistant.text = text;
+  lastAssistant.candidates = candidates;
+  renderMessages();
+}
+
+function renderMessages() {
+  chatThread.innerHTML = messages
+    .map((message) => {
+      const candidateHtml = message.candidates?.length
+        ? renderCandidateCarousel(message.candidates)
+        : "";
+
+      return `
+        <article class="apChatMessage ${message.role === "user" ? "isUser" : "isAssistant"}">
+          <div class="apBubble">
+            <p>${escapeHtml(message.text)}</p>
+            ${candidateHtml}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  chatThread.scrollTop = chatThread.scrollHeight;
+}
+
+function renderCandidateCarousel(candidates: LocalAgentCandidate[]): string {
+  return `
+    <div class="apChatCarousel">
+      ${candidates
+        .slice(0, 4)
+        .map((candidate, index) => {
+          const isSelected = selectedCandidate?.id === candidate.id;
+          const badge = index === 0 ? "Recommended" : candidate.confidence >= 70 ? "Good match" : "Possible";
+
+          return `
+            <article class="apChatCandidate ${isSelected ? "isSelected" : ""}" data-candidate-id="${escapeHtml(candidate.id)}">
+              <div class="apChatCandidateTop">
+                <span>${toolIcon(candidate.tool)}</span>
+                <em>${badge}</em>
+              </div>
+              <h3>${escapeHtml(candidate.title)}</h3>
+              <p>${escapeHtml(candidate.subtitle)}</p>
+              <div class="apMiniConfidence">
+                <span>${toolLabel(candidate.tool)}</span>
+                <strong>${candidate.confidence}%</strong>
+              </div>
+              <div class="apMiniBar">
+                <span style="width: ${candidate.confidence}%"></span>
+              </div>
+              <button type="button" data-candidate-id="${escapeHtml(candidate.id)}">
+                ${isSelected ? "Selected" : "Select"}
+              </button>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderSelected(candidate: LocalAgentCandidate | null) {
+  selectedCandidate = candidate;
+  selectedDock.hidden = !candidate;
+
+  if (!candidate) {
+    selectedTitle.textContent = "Nothing selected";
+    selectedReason.textContent = "";
+    executeButton.disabled = true;
+    renderMessages();
+    return;
+  }
+
+  selectedTitle.textContent = candidate.title;
+  selectedReason.textContent = candidate.reason;
+  executeButton.disabled = candidate.tool === "ask_clarification" || candidate.risk === "blocked";
+  renderMessages();
 }
 
 function renderPage(scan: PageScanResult | null) {
@@ -273,66 +329,6 @@ function renderDeveloperElements(elements: PageElementSnapshot[]) {
     .join("");
 }
 
-function renderCandidates(nextCandidates: LocalAgentCandidate[]) {
-  candidates = nextCandidates.slice(0, 4);
-  candidateCount.textContent = String(candidates.length);
-  resultsSection.hidden = candidates.length === 0;
-  resultTitle.textContent =
-    candidates.length > 0
-      ? `I found ${candidates.length} possible action${candidates.length === 1 ? "" : "s"}`
-      : "No action found";
-
-  candidateCarousel.innerHTML = candidates
-    .map((candidate, index) => {
-      const isSelected = selectedCandidate?.id === candidate.id;
-      const badge = index === 0 ? "Recommended" : candidate.confidence >= 70 ? "Good match" : "Possible";
-
-      return `
-        <article class="apCandidateCard ${isSelected ? "isSelected" : ""}" data-candidate-id="${escapeHtml(candidate.id)}">
-          <div class="apCandidateTop">
-            <span class="apCandidateIcon">${toolIcon(candidate.tool)}</span>
-            <span class="apCandidateBadge">${badge}</span>
-          </div>
-          <h3>${escapeHtml(candidate.title)}</h3>
-          <p>${escapeHtml(candidate.subtitle)}</p>
-          <div class="apConfidence">
-            <div class="apConfidenceTop">
-              <span>${toolLabel(candidate.tool)}</span>
-              <strong>${candidate.confidence}%</strong>
-            </div>
-            <div class="apConfidenceBar">
-              <span style="width: ${candidate.confidence}%"></span>
-            </div>
-          </div>
-          <p class="apReason">${escapeHtml(candidate.reason)}</p>
-          <button class="apSelectButton" data-candidate-id="${escapeHtml(candidate.id)}" type="button">
-            ${isSelected ? "Selected" : "Select"}
-          </button>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function renderSelected(candidate: LocalAgentCandidate | null) {
-  selectedCandidate = candidate;
-  selectedSection.hidden = !candidate;
-
-  if (!candidate) {
-    selectedTitle.textContent = "Nothing selected";
-    selectedReason.textContent = "";
-    selectedConfidence.textContent = "0%";
-    executeButton.disabled = true;
-    return;
-  }
-
-  selectedTitle.textContent = candidate.title;
-  selectedReason.textContent = candidate.reason;
-  selectedConfidence.textContent = `${candidate.confidence}%`;
-  executeButton.disabled = candidate.risk === "blocked" || candidate.tool === "ask_clarification";
-  renderCandidates(candidates);
-}
-
 function makePlannedClick(candidate: LocalAgentCandidate): PlannedAction {
   if (!candidate.elementId) {
     throw new Error("This action does not have a target element.");
@@ -350,12 +346,12 @@ function makePlannedClick(candidate: LocalAgentCandidate): PlannedAction {
   };
 }
 
-async function sendMessage(request: unknown): Promise<RuntimeResponse> {
+async function sendRuntimeMessage(request: unknown): Promise<RuntimeResponse> {
   return await chrome.runtime.sendMessage(request);
 }
 
 async function scanActivePage(): Promise<PageScanResult> {
-  const response = await sendMessage({ type: "SCAN_PAGE" });
+  const response = await sendRuntimeMessage({ type: "SCAN_PAGE" });
 
   if (!response.ok || response.type !== "SCAN_PAGE_RESULT") {
     throw new Error(response.ok ? "Unexpected scan response." : response.error);
@@ -404,16 +400,65 @@ async function goForward() {
   await chrome.tabs.goForward(tabId);
 }
 
-async function analyzeCommand() {
+async function executeCandidate(candidate: LocalAgentCandidate): Promise<string> {
+  if (candidate.tool === "ask_clarification") {
+    instructionInput.focus();
+    return "Ask again with more detail.";
+  }
+
+  if (candidate.tool === "open_url" || candidate.tool === "search_web") {
+    if (!candidate.url) {
+      throw new Error("No URL found for this action.");
+    }
+
+    await openUrlInActiveTab(candidate.url);
+    return "Done. Website opened.";
+  }
+
+  if (candidate.tool === "scroll_page") {
+    await scrollActivePage(candidate.scrollDirection ?? "down");
+    return "Done. Page scrolled.";
+  }
+
+  if (candidate.tool === "go_back") {
+    await goBack();
+    return "Done. Went back.";
+  }
+
+  if (candidate.tool === "go_forward") {
+    await goForward();
+    return "Done. Went forward.";
+  }
+
+  if (candidate.tool === "click_element") {
+    const plan = makePlannedClick(candidate);
+
+    const response = await sendRuntimeMessage({
+      type: "EXECUTE_ACTION",
+      payload: { action: plan }
+    });
+
+    if (!response.ok || response.type !== "EXECUTE_ACTION_RESULT") {
+      throw new Error(response.ok ? "Unexpected execution response." : response.error);
+    }
+
+    return response.payload.message;
+  }
+
+  return "This action is not executable yet.";
+}
+
+async function submitCommand() {
   const message = instructionInput.value.trim();
 
   if (!message) {
-    setStatus("Write or say a command first.", "error");
     return;
   }
 
+  instructionInput.value = "";
   renderSelected(null);
-  setStatus("Local agent is thinking...", "normal");
+  addMessage({ role: "user", text: message });
+  addMessage({ role: "assistant", text: "Thinking locally..." });
 
   try {
     let plan = createLocalAgentPlan({
@@ -422,7 +467,7 @@ async function analyzeCommand() {
     });
 
     if (plan.needsScan) {
-      setStatus("Analyzing the active page locally...", "normal");
+      updateLastAssistantMessage("Analyzing the active page...");
       lastScan = await scanActivePage();
       renderPage(lastScan);
       renderDeveloperElements(lastScan.elements);
@@ -433,91 +478,55 @@ async function analyzeCommand() {
       });
     }
 
-    renderCandidates(plan.candidates);
-    renderSelected(plan.candidates.find((candidate) => candidate.id === plan.recommendedCandidateId) ?? plan.candidates[0] ?? null);
-    setStatus(plan.message, "success");
+    latestCandidates = plan.candidates.slice(0, 4);
+    const recommendedCandidate =
+      latestCandidates.find((candidate) => candidate.id === plan.recommendedCandidateId) ??
+      latestCandidates[0] ??
+      null;
+
+    if (recommendedCandidate && autoRunTools.has(recommendedCandidate.tool) && recommendedCandidate.confidence >= 85) {
+      updateLastAssistantMessage(`I can do this: ${recommendedCandidate.title}. Running it now...`);
+      const result = await executeCandidate(recommendedCandidate);
+      addMessage({ role: "assistant", text: result });
+      return;
+    }
+
+    updateLastAssistantMessage(plan.message, latestCandidates);
+    renderSelected(recommendedCandidate);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown local agent error.";
-    setStatus(errorMessage, "error");
-  }
-}
-
-async function executeSelectedAction() {
-  if (!selectedCandidate) {
-    setStatus("Select an action first.", "error");
-    return;
-  }
-
-  if (selectedCandidate.tool === "ask_clarification") {
-    setStatus("Ask again with more detail.", "normal");
-    instructionInput.focus();
-    return;
-  }
-
-  setStatus("Executing confirmed action...", "normal");
-
-  try {
-    if (selectedCandidate.tool === "open_url" || selectedCandidate.tool === "search_web") {
-      if (!selectedCandidate.url) {
-        throw new Error("No URL found for this action.");
-      }
-
-      await openUrlInActiveTab(selectedCandidate.url);
-      setStatus("Done. Website opened.", "success");
-      return;
-    }
-
-    if (selectedCandidate.tool === "scroll_page") {
-      await scrollActivePage(selectedCandidate.scrollDirection ?? "down");
-      setStatus("Done. Page scrolled.", "success");
-      return;
-    }
-
-    if (selectedCandidate.tool === "go_back") {
-      await goBack();
-      setStatus("Done. Went back.", "success");
-      return;
-    }
-
-    if (selectedCandidate.tool === "go_forward") {
-      await goForward();
-      setStatus("Done. Went forward.", "success");
-      return;
-    }
-
-    if (selectedCandidate.tool === "click_element") {
-      const plan = makePlannedClick(selectedCandidate);
-
-      const response = await sendMessage({
-        type: "EXECUTE_ACTION",
-        payload: { action: plan }
-      });
-
-      if (!response.ok || response.type !== "EXECUTE_ACTION_RESULT") {
-        throw new Error(response.ok ? "Unexpected execution response." : response.error);
-      }
-
-      setStatus(response.payload.message, response.payload.ok ? "success" : "error");
-      return;
-    }
-
-    setStatus("This tool is not executable yet.", "error");
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown execution error.";
-    setStatus(errorMessage, "error");
+    const message = error instanceof Error ? error.message : "Unknown local agent error.";
+    updateLastAssistantMessage(message);
   }
 }
 
 function selectCandidateByIndex(index: number) {
-  const candidate = candidates[index];
+  const candidate = latestCandidates[index];
 
   if (!candidate) {
-    setStatus("That option is not available.", "error");
+    addMessage({ role: "assistant", text: "That option is not available." });
     return;
   }
 
   renderSelected(candidate);
-  setStatus(`Selected: ${candidate.title}`, "success");
+  addMessage({ role: "assistant", text: `Selected: ${candidate.title}. Say “confirm” or press Execute.` });
+}
+
+async function executeSelectedAction() {
+  if (!selectedCandidate) {
+    addMessage({ role: "assistant", text: "Select an action first." });
+    return;
+  }
+
+  addMessage({ role: "assistant", text: `Executing: ${selectedCandidate.title}...` });
+
+  try {
+    const result = await executeCandidate(selectedCandidate);
+    addMessage({ role: "assistant", text: result });
+    renderSelected(null);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown execution error.";
+    addMessage({ role: "assistant", text: message });
+  }
 }
 
 function handleVoiceShortcut(transcript: string): boolean {
@@ -550,7 +559,7 @@ function handleVoiceShortcut(transcript: string): boolean {
 
   if (["cancel", "stop", "no", "нет", "отмена"].includes(text)) {
     renderSelected(null);
-    setStatus("Cancelled.", "normal");
+    addMessage({ role: "assistant", text: "Cancelled." });
     return true;
   }
 
@@ -561,15 +570,15 @@ function startVoiceInput() {
   const SpeechRecognitionClass = window.SpeechRecognition ?? window.webkitSpeechRecognition;
 
   if (!SpeechRecognitionClass) {
-    setStatus("Voice input is not supported in this browser. Use chat mode.", "error");
+    addMessage({ role: "assistant", text: "Voice input is not supported in this browser. Use chat mode." });
     return;
   }
 
   if (isListening && recognition) {
     recognition.abort();
     isListening = false;
-    voiceButton.textContent = "🎙 Speak";
-    setStatus("Voice input stopped.", "normal");
+    voiceButton.textContent = "🎙";
+    addMessage({ role: "assistant", text: "Voice input stopped." });
     return;
   }
 
@@ -582,7 +591,7 @@ function startVoiceInput() {
     const transcript = event.results[0]?.[0]?.transcript?.trim() ?? "";
 
     if (!transcript) {
-      setStatus("I did not hear a command. Try again.", "error");
+      addMessage({ role: "assistant", text: "I did not hear a command. Try again." });
       return;
     }
 
@@ -591,40 +600,42 @@ function startVoiceInput() {
     }
 
     instructionInput.value = transcript;
-    setStatus(`You said: "${transcript}"`, "success");
-    void analyzeCommand();
+    void submitCommand();
   };
 
   recognition.onerror = (event) => {
-    setStatus(`Voice error: ${event.error ?? "unknown"}. Use chat mode if needed.`, "error");
+    addMessage({ role: "assistant", text: `Voice error: ${event.error ?? "unknown"}. Use chat mode if needed.` });
   };
 
   recognition.onend = () => {
     isListening = false;
-    voiceButton.textContent = "🎙 Speak";
+    voiceButton.textContent = "🎙";
   };
 
   isListening = true;
-  voiceButton.textContent = "Listening...";
-  setStatus("Listening. Say what you want to do.", "normal");
+  voiceButton.textContent = "●";
+  addMessage({ role: "assistant", text: "Listening. Say what you want to do." });
   recognition.start();
 }
 
 function newChat() {
   instructionInput.value = "";
   lastScan = null;
-  candidates = [];
+  latestCandidates = [];
   selectedCandidate = null;
+  messages = [];
   renderPage(null);
   renderDeveloperElements([]);
-  renderCandidates([]);
   renderSelected(null);
-  setStatus("New chat started. Write or say a command.", "normal");
+  addMessage({
+    role: "assistant",
+    text: "Ready. Ask me to open a site, search, scroll, go back, or click something on the page."
+  });
   instructionInput.focus();
 }
 
-analyzeButton.addEventListener("click", () => {
-  void analyzeCommand();
+sendButton.addEventListener("click", () => {
+  void submitCommand();
 });
 
 executeButton.addEventListener("click", () => {
@@ -635,34 +646,22 @@ voiceButton.addEventListener("click", () => {
   startVoiceInput();
 });
 
-askAgainButton.addEventListener("click", () => {
-  instructionInput.focus();
-  setStatus("Refine your command and run the local agent again.", "normal");
-});
-
 newChatButton.addEventListener("click", () => {
   newChat();
 });
 
-candidateCarousel.addEventListener("click", (event) => {
+chatThread.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
   const card = target.closest<HTMLElement>("[data-candidate-id]");
 
   if (!card) return;
 
-  const candidate = candidates.find((item) => item.id === card.dataset.candidateId);
+  const candidate = latestCandidates.find((item) => item.id === card.dataset.candidateId);
 
   if (!candidate) return;
 
   renderSelected(candidate);
-  setStatus("Action selected. Review it before executing.", "success");
-});
-
-document.querySelectorAll<HTMLButtonElement>("[data-example]").forEach((button) => {
-  button.addEventListener("click", () => {
-    instructionInput.value = button.dataset.example ?? "";
-    instructionInput.focus();
-  });
+  addMessage({ role: "assistant", text: `Selected: ${candidate.title}. Say “confirm” or press Execute.` });
 });
 
 document.querySelectorAll<HTMLButtonElement>("[data-theme]").forEach((button) => {
@@ -674,7 +673,10 @@ document.querySelectorAll<HTMLButtonElement>("[data-theme]").forEach((button) =>
 });
 
 instructionInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-    void analyzeCommand();
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    void submitCommand();
   }
 });
+
+newChat();

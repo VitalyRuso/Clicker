@@ -428,3 +428,348 @@
   font-size: 11px;
   padding: 7px 9px;
 }
+
+/* v0.4.1 Chat Flow UI */
+
+.apChatShell {
+  --ap-bg: #fff7f1;
+  --ap-card: rgba(255, 255, 255, 0.84);
+  --ap-card-strong: #ffffff;
+  --ap-text: #2a1d18;
+  --ap-muted: #8a6c61;
+  --ap-line: #f2d9cc;
+  --ap-primary: #f17749;
+  --ap-primary-2: #c879ff;
+  --ap-danger: #b42318;
+  --ap-success: #087443;
+  background:
+    radial-gradient(circle at top right, rgba(200, 121, 255, 0.22), transparent 35%),
+    radial-gradient(circle at bottom left, rgba(241, 119, 73, 0.16), transparent 35%),
+    var(--ap-bg);
+  box-sizing: border-box;
+  color: var(--ap-text);
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto 1fr auto auto auto;
+  height: 600px;
+  overflow: hidden;
+  padding: 12px;
+  width: 420px;
+}
+
+.apChatShell[data-theme="professional"] {
+  --ap-bg: #f5f7fb;
+  --ap-card: rgba(255, 255, 255, 0.94);
+  --ap-card-strong: #ffffff;
+  --ap-text: #162033;
+  --ap-muted: #667085;
+  --ap-line: #dce3f1;
+  --ap-primary: #3155ff;
+  --ap-primary-2: #6d5dfc;
+  --ap-danger: #c83349;
+  --ap-success: #057a55;
+}
+
+.apChatShell[data-theme="jarvis"] {
+  --ap-bg: #08111f;
+  --ap-card: rgba(255, 255, 255, 0.08);
+  --ap-card-strong: rgba(255, 255, 255, 0.14);
+  --ap-text: #f7fbff;
+  --ap-muted: rgba(247, 251, 255, 0.68);
+  --ap-line: rgba(255, 255, 255, 0.14);
+  --ap-primary: #65d9ff;
+  --ap-primary-2: #8a7dff;
+  --ap-danger: #ff6b7a;
+  --ap-success: #51f6a4;
+}
+
+.apChatHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.apBrandBlock {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.apMiniOrb {
+  background: linear-gradient(135deg, var(--ap-primary), var(--ap-primary-2));
+  border-radius: 999px;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--ap-primary) 42%, transparent);
+  display: block;
+  height: 34px;
+  width: 34px;
+}
+
+.apChatHeader h1 {
+  font-size: 20px;
+  line-height: 1;
+  margin: 0;
+}
+
+.apHeaderButton {
+  background: var(--ap-card);
+  border: 1px solid var(--ap-line);
+  border-radius: 999px;
+  color: var(--ap-text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 10px;
+}
+
+.apChatThread {
+  display: grid;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.apChatMessage {
+  display: flex;
+}
+
+.apChatMessage.isUser {
+  justify-content: flex-end;
+}
+
+.apChatMessage.isAssistant {
+  justify-content: flex-start;
+}
+
+.apBubble {
+  background: var(--ap-card);
+  border: 1px solid var(--ap-line);
+  border-radius: 18px;
+  max-width: 94%;
+  padding: 11px;
+}
+
+.apChatMessage.isUser .apBubble {
+  background: linear-gradient(135deg, var(--ap-primary), var(--ap-primary-2));
+  color: white;
+}
+
+.apBubble p {
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.apChatCarousel {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x mandatory;
+  width: 360px;
+}
+
+.apChatCandidate {
+  background: var(--ap-card-strong);
+  border: 1px solid var(--ap-line);
+  border-radius: 18px;
+  flex: 0 0 245px;
+  padding: 12px;
+  scroll-snap-align: start;
+}
+
+.apChatCandidate.isSelected {
+  border-color: var(--ap-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ap-primary) 18%, transparent);
+}
+
+.apChatCandidateTop {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.apChatCandidateTop span {
+  font-size: 22px;
+}
+
+.apChatCandidateTop em {
+  background: color-mix(in srgb, var(--ap-primary) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ap-primary) 35%, transparent);
+  border-radius: 999px;
+  color: var(--ap-primary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+  padding: 4px 7px;
+}
+
+.apChatCandidate h3 {
+  font-size: 15px;
+  line-height: 1.15;
+  margin: 10px 0 5px;
+}
+
+.apChatCandidate p {
+  color: var(--ap-muted);
+  font-size: 12px;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.apMiniConfidence {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.apMiniConfidence span {
+  color: var(--ap-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.apMiniConfidence strong {
+  font-size: 12px;
+}
+
+.apMiniBar {
+  background: color-mix(in srgb, var(--ap-text) 12%, transparent);
+  border-radius: 999px;
+  height: 7px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.apMiniBar span {
+  background: linear-gradient(90deg, var(--ap-primary), var(--ap-primary-2));
+  display: block;
+  height: 100%;
+}
+
+.apChatCandidate button {
+  background: transparent;
+  border: 1px solid var(--ap-line);
+  border-radius: 999px;
+  color: var(--ap-text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  margin-top: 10px;
+  padding: 8px;
+  width: 100%;
+}
+
+.apSelectedDock {
+  align-items: center;
+  background: var(--ap-card);
+  border: 1px solid var(--ap-line);
+  border-radius: 18px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.apSelectedDock div {
+  display: grid;
+  gap: 2px;
+}
+
+.apSelectedDock strong {
+  font-size: 13px;
+}
+
+.apSelectedDock span {
+  color: var(--ap-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.apExecuteMiniButton {
+  background: linear-gradient(135deg, var(--ap-success), var(--ap-primary));
+  border: 0;
+  border-radius: 999px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 10px 14px;
+}
+
+.apExecuteMiniButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.apComposer {
+  background: var(--ap-card);
+  border: 1px solid var(--ap-line);
+  border-radius: 20px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.apComposer textarea {
+  background: transparent;
+  border: 0;
+  color: var(--ap-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  max-height: 90px;
+  min-height: 38px;
+  outline: none;
+  resize: none;
+  width: 100%;
+}
+
+.apComposer textarea::placeholder {
+  color: var(--ap-muted);
+}
+
+.apComposerActions {
+  display: flex;
+  gap: 8px;
+}
+
+.apComposerActions button {
+  border: 0;
+  border-radius: 999px;
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 10px 12px;
+}
+
+#voiceButton {
+  background: #1e314f;
+  width: 58px;
+}
+
+#sendButton {
+  background: linear-gradient(135deg, var(--ap-primary), var(--ap-primary-2));
+  flex: 1;
+}
+
+.apDevDrawer {
+  background: var(--ap-card);
+  border: 1px solid var(--ap-line);
+  border-radius: 16px;
+  padding: 8px 10px;
+}
+
+.apDevDrawer summary {
+  color: var(--ap-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.apChatThemeDock {
+  position: static;
+}
