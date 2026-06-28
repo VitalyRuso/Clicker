@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ActionPilot - Browser Clicker Agent",
+  "description": "User-controlled browser automation assistant for visible page actions.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "ActionPilot",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "permissions": ["activeTab", "scripting", "storage"]
+}

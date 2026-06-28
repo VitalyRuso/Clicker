@@ -1,0 +1,16 @@
+{
+  "name": "browser-clicker-agent",
+  "private": true,
+  "version": "0.1.0",
+  "description": "User-controlled browser automation assistant extension with a future Rust planner API.",
+  "scripts": {
+    "dev:extension": "npm --workspace apps/extension run dev",
+    "build:extension": "npm --workspace apps/extension run build",
+    "typecheck:extension": "npm --workspace apps/extension run typecheck",
+    "dev:agent-api": "cargo run --manifest-path apps/agent-api/Cargo.toml",
+    "fmt:agent-api": "cargo fmt --manifest-path apps/agent-api/Cargo.toml"
+  },
+  "workspaces": [
+    "apps/extension"
+  ]
+}

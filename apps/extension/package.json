@@ -1,0 +1,17 @@
+{
+  "name": "@browser-clicker-agent/extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/chrome": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
