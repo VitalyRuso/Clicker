@@ -88,15 +88,15 @@ export function createLocalAgentPlan(request: LocalAgentRequest): LocalAgentResp
     return response("I can navigate the browser history.", [historyCandidate], false);
   }
 
-  const openSiteCandidate = parseKnownSiteOpen(message);
-  if (openSiteCandidate) {
-    return response("I found a website shortcut.", [openSiteCandidate], false);
-  }
+ const searchCandidate = parseSearch(message);
+    if (searchCandidate) {
+  return response("I can search this for you.", [searchCandidate], false);
+}
 
-  const searchCandidate = parseSearch(message);
-  if (searchCandidate) {
-    return response("I can search this for you.", [searchCandidate], false);
-  }
+const openSiteCandidate = parseKnownSiteOpen(message);
+    if (openSiteCandidate) {
+  return response("I found a website shortcut.", [openSiteCandidate], false);
+}
 
   if (!request.scan) {
     return {
@@ -168,7 +168,14 @@ function parseDirectUrl(input: string): LocalAgentCandidate | null {
 
 function parseKnownSiteOpen(input: string): LocalAgentCandidate | null {
   const normalized = normalize(input);
-  const looksLikeOpen = hasAny(normalized, ["open", "go", "открой", "открыть", "зайди", "зайти"]);
+  const looksLikeOpen =
+  hasWord(normalized, "open") ||
+  hasPhrase(normalized, "go to") ||
+  hasPhrase(normalized, "go on") ||
+  hasWord(normalized, "открой") ||
+  hasWord(normalized, "открыть") ||
+  hasWord(normalized, "зайди") ||
+  hasWord(normalized, "зайти");
 
   if (!looksLikeOpen) return null;
 
@@ -396,22 +403,26 @@ function meaningfulTokens(input: string): string[] {
 function cleanupSearchQuery(input: string, engineKeys: string[]): string {
   let result = input;
 
-  const removeWords = [
-    "search",
-    "find",
-    "look for",
-    "google",
-    "youtube",
-    "rae",
-    "dle",
-    "ищи",
-    "найди",
-    "поиск",
-    "искать",
-    "в",
-    "на",
-    ...engineKeys
-  ];
+ const removeWords = [
+  "search",
+  "find",
+  "look for",
+  "go look for",
+  "google",
+  "youtube",
+  "rae",
+  "dle",
+  "please",
+  "me",
+  "for",
+  "ищи",
+  "найди",
+  "поиск",
+  "искать",
+  "в",
+  "на",
+  ...engineKeys
+];
 
   for (const word of removeWords) {
     result = result.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, "gi"), " ");
@@ -451,4 +462,12 @@ function hasAny(input: string, terms: string[]): boolean {
 
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWord(input: string, word: string): boolean {
+  return new RegExp(`(^|\\s)${escapeRegExp(word)}(\\s|$)`, "i").test(input);
+}
+
+function hasPhrase(input: string, phrase: string): boolean {
+  return input.includes(phrase);
 }

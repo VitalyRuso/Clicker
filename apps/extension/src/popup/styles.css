@@ -773,3 +773,9 @@
 .apChatThemeDock {
   position: static;
 }
+
+/* Fix hidden selected dock */
+.apSelectedDock[hidden],
+.apChatShell [hidden] {
+  display: none !important;
+}

@@ -184,7 +184,56 @@ function toolLabel(tool: BrowserTool): string {
     ask_clarification: "clarify"
   };
 
+
   return labels[tool];
+}
+
+function runningText(candidate: LocalAgentCandidate): string {
+  if (candidate.tool === "search_web") {
+    return `Searching: ${candidate.subtitle}...`;
+  }
+
+  if (candidate.tool === "open_url") {
+    return `Opening: ${candidate.title.replace(/^Open\s+/i, "")}...`;
+  }
+
+  if (candidate.tool === "scroll_page") {
+    return `${candidate.title}...`;
+  }
+
+  if (candidate.tool === "go_back") {
+    return "Going back...";
+  }
+
+  if (candidate.tool === "go_forward") {
+    return "Going forward...";
+  }
+
+  return `I can do this: ${candidate.title}. Waiting for confirmation.`;
+}
+
+function doneText(candidate: LocalAgentCandidate): string {
+  if (candidate.tool === "search_web") {
+    return `Done. Search results opened for “${candidate.subtitle}”.`;
+  }
+
+  if (candidate.tool === "open_url") {
+    return `Done. Opened ${candidate.title.replace(/^Open\s+/i, "")}.`;
+  }
+
+  if (candidate.tool === "scroll_page") {
+    return "Done. Page scrolled.";
+  }
+
+  if (candidate.tool === "go_back") {
+    return "Done. Went back.";
+  }
+
+  if (candidate.tool === "go_forward") {
+    return "Done. Went forward.";
+  }
+
+  return "Done.";
 }
 
 function addMessage(message: Omit<ChatMessage, "id">) {
@@ -412,22 +461,22 @@ async function executeCandidate(candidate: LocalAgentCandidate): Promise<string>
     }
 
     await openUrlInActiveTab(candidate.url);
-    return "Done. Website opened.";
+    return doneText(candidate);
   }
 
   if (candidate.tool === "scroll_page") {
     await scrollActivePage(candidate.scrollDirection ?? "down");
-    return "Done. Page scrolled.";
+    return doneText(candidate);
   }
 
   if (candidate.tool === "go_back") {
     await goBack();
-    return "Done. Went back.";
+    return doneText(candidate);
   }
 
   if (candidate.tool === "go_forward") {
     await goForward();
-    return "Done. Went forward.";
+    return doneText(candidate);
   }
 
   if (candidate.tool === "click_element") {
@@ -485,7 +534,7 @@ async function submitCommand() {
       null;
 
     if (recommendedCandidate && autoRunTools.has(recommendedCandidate.tool) && recommendedCandidate.confidence >= 85) {
-      updateLastAssistantMessage(`I can do this: ${recommendedCandidate.title}. Running it now...`);
+      updateLastAssistantMessage(runningText(recommendedCandidate));
       const result = await executeCandidate(recommendedCandidate);
       addMessage({ role: "assistant", text: result });
       return;
