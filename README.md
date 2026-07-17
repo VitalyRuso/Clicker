@@ -300,9 +300,9 @@ It tries to be understandable, inspectable, and difficult to misuse.
 ## Documentation
 
 - [`docs/SAFETY_RULES.md`](docs/SAFETY_RULES.md)
-- [`docs/PLAN_DE_TRABAJO_ES.md`](docs/PLAN_DE_TRABAJO_ES.md)
-- [`docs/TASK_BOARD_ES.md`](docs/TASK_BOARD_ES.md)
-- [`docs/BRANCH_STRATEGY_ES.md`](docs/BRANCH_STRATEGY_ES.md)
+- [`docs/WORK_PLAN.md`](docs/WORK_PLAN.md)
+- [`docs/TASK_BOARD.md`](docs/TASK_BOARD.md)
+- [`docs/BRANCH_STRATEGY.md`](docs/BRANCH_STRATEGY.md)
 
 ---
 
